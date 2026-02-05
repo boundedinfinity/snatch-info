@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -75,9 +76,9 @@ func copyToClip(text string) error {
 	return nil
 }
 
-func getAnchor(doc *goquery.Document, fragment string, text *string) (bool, error) {
-	if fragment != "" {
-		id := "#" + fragment
+func getAnchor(doc *goquery.Document, link *url.URL, text *string) (bool, error) {
+	if link != nil && link.Fragment != "" {
+		id := "#" + link.Fragment
 		doc.Find(id).EachWithBreak(func(i int, selection *goquery.Selection) bool {
 			*text = selection.Text()
 			return true
@@ -87,12 +88,30 @@ func getAnchor(doc *goquery.Document, fragment string, text *string) (bool, erro
 	return *text != "", nil
 }
 
-func getTitle(doc *goquery.Document, text *string) (bool, error) {
+func getTitle(doc *goquery.Document, link *url.URL, text *string) (bool, error) {
+	working := *text
+
 	doc.Find("title").EachWithBreak(func(i int, selection *goquery.Selection) bool {
-		*text = selection.Text()
+		working = selection.Text()
 		return true
 	})
 
+	working = strings.TrimSpace(working)
+
+	if hostname, ok := geHostname(link); ok {
+		ltitle := strings.ToLower(working)
+		hostname = strings.ToLower(hostname)
+		i := strings.Index(ltitle, hostname)
+
+		if i >= 0 {
+			working = working[:i]
+			working = strings.Trim(working, " -")
+		}
+
+		working = fmt.Sprintf("%s : %s", hostname, working)
+	}
+
+	*text = working
 	return *text != "", nil
 }
 
@@ -107,20 +126,33 @@ func snatch(link string, title *string) error {
 		return err
 	}
 
-	if ok, err := getTitle(doc, title); err != nil {
+	if ok, err := getTitle(doc, parsed, title); err != nil {
 		return err
 	} else if !ok {
 		*title = parsed.Host
 	}
 
 	var sectionTitle string
-	if ok, err := getAnchor(doc, parsed.Fragment, &sectionTitle); err != nil {
+	if ok, err := getAnchor(doc, parsed, &sectionTitle); err != nil {
 		return err
 	} else if ok {
 		*title = fmt.Sprintf("%s : %s", *title, sectionTitle)
 	}
 
 	return nil
+}
+
+func geHostname(link *url.URL) (string, bool) {
+	var hostname string
+	parts := strings.Split(link.Hostname(), ".")
+
+	if len(parts) > 1 {
+		slices.Reverse(parts)
+		hostname = parts[1]
+
+	}
+
+	return hostname, hostname != ""
 }
 
 func getPage(url string) (*goquery.Document, error) {
