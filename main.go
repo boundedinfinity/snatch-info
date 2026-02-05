@@ -15,30 +15,41 @@ import (
 )
 
 func main() {
-	url := os.Args[1]
-	fmt.Printf("Snatching %s\n", url)
-	var title string
+	urls := os.Args[1:]
 
-	if err := snatch(url, &title); err != nil {
-		log.Fatal(err)
-	}
+	for _, url := range urls {
+		fmt.Printf("Snatching %s\n", url)
+		var title string
 
-	title = fmt.Sprintf("[%s](%s)", title, url)
-	fmt.Printf("\t%s\n", title)
+		if err := snatch(url, &title); err != nil {
+			log.Fatal(err)
+		}
 
-	if err := copyToClip(title); err != nil {
-		log.Fatal(err)
+		title = fmt.Sprintf("[%s](%s)", title, url)
+		fmt.Printf("\t%s\n", title)
+
+		if err := copyToClip(title); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
 func copyToClip(text string) error {
+	var shell string
+
+	if found, err := exec.LookPath("bash"); err != nil {
+		return err
+	} else {
+		shell = found
+	}
+
 	var command string
 
 	switch runtime.GOOS {
 	case "darwin":
 		command = "pbcopy"
 	default:
-		return fmt.Errorf("OS '%s' not supported for copy to clipboard", runtime.GOOS)
+		return fmt.Errorf("OS clipboard program '%s' not found", runtime.GOOS)
 	}
 
 	if found, err := exec.LookPath(command); err != nil {
@@ -47,8 +58,16 @@ func copyToClip(text string) error {
 		command = found
 	}
 
-	if _, err := exec.Command("bash", "-c", fmt.Sprintf("echo -n '%s' | %s", text, command)).Output(); err != nil {
-		return fmt.Errorf("copy to clip board failed: %w", err)
+	args := []string{"-c", fmt.Sprintf("echo -n '%s' | %s", text, command)}
+
+	if output, err := exec.Command(shell, args...).Output(); err != nil {
+		soutput := string(output)
+
+		if soutput == "" {
+			soutput = "<no command output>"
+		}
+
+		return fmt.Errorf("copy to clip board failed: %s : %w", soutput, err)
 	}
 
 	fmt.Println("Copied to clipboard")

@@ -5,13 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch Package",
+            "name": "Debug",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
             "args": [
-                "https://go.dev/ref/spec#Type_definitions"
+                "https://www.youtube.com/watch?v=J8Fo15CtsZo"
             ]
         }
     ]
