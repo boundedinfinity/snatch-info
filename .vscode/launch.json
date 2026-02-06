@@ -11,6 +11,8 @@
             "mode": "auto",
             "program": "${fileDirname}",
             "args": [
+                "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/head",
+                "https://gdpr.eu/what-is-gdpr/",
                 "https://www.youtube.com/watch?v=J8Fo15CtsZo"
             ]
         }

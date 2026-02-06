@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -17,25 +19,86 @@ import (
 
 func main() {
 	urls := os.Args[1:]
+	var texts []string
+	var config Config
+
+	handleErr := func(err error) {
+		log.Fatal(err)
+	}
+
+	if err := loadConfig(&config); err != nil {
+		handleErr(err)
+	}
 
 	for _, url := range urls {
 		fmt.Printf("Snatching %s\n", url)
 		var title string
 
-		if err := snatch(url, &title); err != nil {
-			log.Fatal(err)
+		if err := snatch(config, url, &title); err != nil {
+			handleErr(err)
 		}
 
 		title = fmt.Sprintf("[%s](%s)", title, url)
 		fmt.Printf("\t%s\n", title)
 
-		if err := copyToClip(title); err != nil {
-			log.Fatal(err)
-		}
+		texts = append(texts, title)
+	}
+
+	if err := copyToClip(texts); err != nil {
+		handleErr(err)
 	}
 }
 
-func copyToClip(text string) error {
+func loadConfig(config *Config) error {
+	configFile := "config.json"
+
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	paths := []string{
+		filepath.Join(".", configFile),
+		filepath.Join(filepath.Dir(exe), configFile),
+	}
+
+	if os.Getenv("HOME") != "" {
+		paths = append(paths, filepath.Join(
+			os.Getenv("HOME"),
+			".config/bounded-snatch-info",
+			configFile,
+		))
+	}
+
+	var path string
+
+	for _, candidate := range paths {
+		if _, err := os.Stat(candidate); err == nil {
+			path = candidate
+			break
+		}
+	}
+
+	if path == "" {
+		return nil
+	}
+
+	bs, err := os.ReadFile(path)
+
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(bs, config); err != nil {
+		return err
+	}
+
+	fmt.Printf("Loaded %s\n", path)
+
+	return nil
+}
+
+func copyToClip(texts []string) error {
 	var shell string
 
 	if found, err := exec.LookPath("bash"); err != nil {
@@ -59,6 +122,7 @@ func copyToClip(text string) error {
 		command = found
 	}
 
+	text := strings.Join(texts, "\n")
 	args := []string{"-c", fmt.Sprintf("echo -n '%s' | %s", text, command)}
 
 	if output, err := exec.Command(shell, args...).Output(); err != nil {
@@ -88,34 +152,9 @@ func getAnchor(doc *goquery.Document, link *url.URL, text *string) (bool, error)
 	return *text != "", nil
 }
 
-func getTitle(doc *goquery.Document, link *url.URL, text *string) (bool, error) {
-	working := *text
+func snatch(config Config, link string, title *string) error {
+	working := *title
 
-	doc.Find("title").EachWithBreak(func(i int, selection *goquery.Selection) bool {
-		working = selection.Text()
-		return true
-	})
-
-	working = strings.TrimSpace(working)
-
-	if hostname, ok := geHostname(link); ok {
-		ltitle := strings.ToLower(working)
-		hostname = strings.ToLower(hostname)
-		i := strings.Index(ltitle, hostname)
-
-		if i >= 0 {
-			working = working[:i]
-			working = strings.Trim(working, " -")
-		}
-
-		working = fmt.Sprintf("%s : %s", hostname, working)
-	}
-
-	*text = working
-	return *text != "", nil
-}
-
-func snatch(link string, title *string) error {
 	parsed, err := url.Parse(link)
 	if err != nil {
 		return err
@@ -126,19 +165,41 @@ func snatch(link string, title *string) error {
 		return err
 	}
 
-	if ok, err := getTitle(doc, parsed, title); err != nil {
-		return err
-	} else if !ok {
-		*title = parsed.Host
+	doc.Find("title").EachWithBreak(func(i int, selection *goquery.Selection) bool {
+		working = selection.Text()
+		return true
+	})
+
+	working = strings.TrimSpace(working)
+
+	if hostname, ok := geHostname(parsed); ok {
+		ltitle := strings.ToLower(working)
+		hostname = strings.ToLower(hostname)
+
+		if strings.HasSuffix(ltitle, hostname) {
+			i := strings.LastIndex(ltitle, hostname)
+
+			if i >= 0 {
+				working = working[:i]
+				working = strings.Trim(working, " -")
+			}
+		}
+
+		if new, cok := config.GetTitle(parsed.Hostname()); cok {
+			hostname = new
+		}
+
+		working = fmt.Sprintf("%s : %s", hostname, working)
 	}
 
 	var sectionTitle string
 	if ok, err := getAnchor(doc, parsed, &sectionTitle); err != nil {
 		return err
 	} else if ok {
-		*title = fmt.Sprintf("%s : %s", *title, sectionTitle)
+		working = fmt.Sprintf("%s : %s", working, sectionTitle)
 	}
 
+	*title = working
 	return nil
 }
 

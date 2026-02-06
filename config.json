@@ -1,0 +1,20 @@
+{
+    "hostname-mappers": [
+        {
+            "hostname": "www.wikipedia.org",
+            "title": "Wikipedia"
+        },
+        {
+            "hostname": "www.rfc-editor.org",
+            "title": "RFC Editor"
+        },
+        {
+            "hostname": "www.youtube.com",
+            "title": "YouTube"
+        },
+        {
+            "hostname": "www.congress.gov",
+            "title": "Congress.gov"
+        }
+    ]
+}
