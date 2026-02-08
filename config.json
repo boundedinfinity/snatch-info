@@ -15,6 +15,10 @@
         {
             "hostname": "www.congress.gov",
             "title": "Congress.gov"
+        },
+        {
+            "hostname": "www.irs.gov",
+            "title": "IRS"
         }
     ]
 }
